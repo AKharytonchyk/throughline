@@ -114,11 +114,21 @@ expensive in *flow* — it is re-sent as `cache_read` on **every turn**. On real
 is a few million chars while token flow is **~8.1B tokens, 96.5% of it `cache_read`** — the
 context re-billed turn after turn. The occupancy lens structurally can't show that; this one does.
 
+![Token flow by type](assets/screenshots/token-flow.png)
+
+*Exact per-turn token spend by type, with the cache-read share called out and a per-model split
+that reconciles to the total. Here 91.6% of all tokens are `cache_read` — context re-billed every turn.*
+
 - **Token flow by type** — exact `input` / `output` / `cache-write` / `cache-read`, with the
   **cache-read share** called out, per session and overall, split **by model**. Counts are read
   verbatim from `usage`, so they are labeled **exact** (not estimated).
 - **Re-billing growth** — a per-session cumulative curve; the filled band is `cache-read`, so you
   can *see* the resident context being re-paid every turn as a long session grows.
+
+![Re-billing growth over a session](assets/screenshots/token-growth.png)
+
+*Cumulative tokens across one session's turns — the filled band is `cache-read`, the context
+re-sent (and re-billed) every turn, which is what makes long sessions expensive.*
 - **Token spend over time** — a per-day/week token trend that honors the same repo/time filter and
   intervention markers, and **reads out the before/after change** in mean daily tokens at each marker.
 - **Estimated cost** *(opt-in, empty by default)* — drop a per-model price list at
