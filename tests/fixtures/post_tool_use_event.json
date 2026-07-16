@@ -1,0 +1,1 @@
+{"session_id": "session-a", "tool_name": "Read", "tool_input": {"file_path": "/x"}, "tool_output": "some output content"}

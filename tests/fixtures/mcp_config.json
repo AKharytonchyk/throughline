@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "acme": {
+      "command": "x"
+    },
+    "playwright": {
+      "command": "y"
+    }
+  }
+}

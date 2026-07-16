@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "throughline"
+version = "0.1.0"
+description = "Local, single-user tool that shows where your Claude Code context budget goes."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "AKharytonchyk", email = "20802675+AKharytonchyk@users.noreply.github.com" }]
+keywords = ["claude-code", "context-window", "tokens", "cost", "observability", "cli", "local"]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development",
+    "Intended Audience :: Developers",
+]
+# ZERO runtime dependencies (Constitution: Technology Constraints — standard library only).
+# Everything is covered by: json, argparse, pathlib, shutil, html, string, difflib,
+# collections, itertools, re, unittest. Charting is hand-rolled inline SVG.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/AKharytonchyk/throughline"
+Repository = "https://github.com/AKharytonchyk/throughline"
+Issues = "https://github.com/AKharytonchyk/throughline/issues"
+
+[project.scripts]
+throughline = "throughline.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

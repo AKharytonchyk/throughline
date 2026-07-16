@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "throughline/003/embedded-token-flow.schema.json",
+  "title": "TokenFlow",
+  "description": "A SEPARATE top-level section of the dashboard's embedded blob (alongside, never merged with, the occupancy `cube`/`session_facts`). Unit is tokens. The client re-aggregates it under the shared feature-002 filter. Reuses only the existing `dims.projects`/`dims.days` index tables.",
+  "type": "object",
+  "required": ["unit", "sessions", "by_day", "models", "coverage"],
+  "additionalProperties": false,
+  "properties": {
+    "unit": { "const": "tokens" },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["session", "p", "d", "turns", "no_usage", "totals", "by_model", "growth"],
+        "additionalProperties": false,
+        "properties": {
+          "session": { "type": "string" },
+          "p": { "type": "integer", "minimum": 0, "description": "project index into dims.projects" },
+          "d": { "type": "integer", "minimum": 0, "description": "representative day index into dims.days (earliest usage day) — enables session-level project+date filtering, mirroring session_facts" },
+          "turns": { "type": "integer", "minimum": 0 },
+          "no_usage": { "type": "boolean", "description": "session had assistant turns but none carried a usage block (flagged, not dropped)" },
+          "totals": { "$ref": "#/$defs/flowTotals" },
+          "by_model": {
+            "type": "object",
+            "description": "modelId -> FlowTotals; MUST sum back to totals (golden check)",
+            "additionalProperties": { "$ref": "#/$defs/flowTotals" }
+          },
+          "growth": {
+            "type": "array",
+            "description": "downsampled cumulative series, <=120 points, first+last preserved",
+            "maxItems": 120,
+            "items": {
+              "type": "object",
+              "required": ["i", "cum_input", "cum_output", "cum_write", "cum_read"],
+              "additionalProperties": false,
+              "properties": {
+                "i": { "type": "integer", "minimum": 0 },
+                "cum_input": { "type": "integer", "minimum": 0 },
+                "cum_output": { "type": "integer", "minimum": 0 },
+                "cum_write": { "type": "integer", "minimum": 0 },
+                "cum_read": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "by_day": {
+      "type": "array",
+      "description": "turns bucketed by their own timestamp day, per project; for the over-time trend",
+      "items": {
+        "type": "object",
+        "required": ["p", "d", "input", "output", "cache_write", "cache_read"],
+        "additionalProperties": false,
+        "properties": {
+          "p": { "type": "integer", "minimum": 0 },
+          "d": { "type": "integer", "minimum": 0, "description": "day index into dims.days" },
+          "input": { "type": "integer", "minimum": 0 },
+          "output": { "type": "integer", "minimum": 0 },
+          "cache_write": { "type": "integer", "minimum": 0 },
+          "cache_read": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "models": { "type": "array", "items": { "type": "string" } },
+    "coverage": {
+      "type": "object",
+      "required": ["sessions_total", "sessions_no_usage"],
+      "additionalProperties": false,
+      "properties": {
+        "sessions_total": { "type": "integer", "minimum": 0 },
+        "sessions_no_usage": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cost": {
+      "type": ["object", "null"],
+      "description": "present only when a non-empty prices.json was loaded; every figure is a labeled estimate",
+      "required": ["available"],
+      "additionalProperties": true,
+      "properties": {
+        "available": { "type": "boolean" },
+        "effective": { "type": ["string", "null"] },
+        "unit_label": { "type": ["string", "null"], "description": "e.g. 'USD per million tokens' — echoed in the estimate label" },
+        "by_model": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["priced"],
+            "properties": {
+              "priced": { "type": "boolean", "description": "false ⇒ model present in data but absent from price list ⇒ cost omitted + labeled unpriced" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "flowTotals": {
+      "type": "object",
+      "required": ["input", "output", "cache_write", "cache_read"],
+      "additionalProperties": false,
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cache_write": { "type": "integer", "minimum": 0 },
+        "cache_read": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

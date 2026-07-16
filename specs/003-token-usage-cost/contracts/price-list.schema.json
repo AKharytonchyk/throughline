@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "throughline/003/price-list.schema.json",
+  "title": "PriceList",
+  "description": "User-editable ~/.throughline/prices.json for the OPTIONAL dollar-cost estimate. Ships empty (or absent). With no prices, no dollar figure is shown anywhere. Prices are user-provided and never fetched (Local-Only). A model in the data but absent here is reported 'unpriced' — never guessed.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "effective": {
+      "type": "string",
+      "description": "date these prices are valid as-of (YYYY-MM-DD); shown in the estimate's label"
+    },
+    "unit": {
+      "enum": ["per_token", "per_million"],
+      "default": "per_million",
+      "description": "how the numbers below are expressed; echoed in the estimate label"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USD",
+      "description": "label only; the tool does no conversion"
+    },
+    "models": {
+      "type": "object",
+      "description": "modelId -> per-type unit prices; any omitted type is treated as unpriced for that model",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "input": { "type": "number", "minimum": 0 },
+          "output": { "type": "number", "minimum": 0 },
+          "cache_write": { "type": "number", "minimum": 0 },
+          "cache_read": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "effective": "2026-07-01",
+      "unit": "per_million",
+      "currency": "USD",
+      "models": {
+        "claude-opus-4-8": { "input": 15, "output": 75, "cache_write": 18.75, "cache_read": 1.5 }
+      }
+    },
+    {}
+  ]
+}

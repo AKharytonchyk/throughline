@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "throughline/002/embedded-data.schema.json",
+  "title": "EmbeddedData",
+  "description": "The single JSON blob embedded in dashboard.html (as <script type='application/json' id='thl-data'>) that the client app.js reads to filter and render all views. Built once by the Python analysis; the client only sums/groups it (no re-analysis).",
+  "type": "object",
+  "required": ["generated_at", "unit", "dims", "mounted_keys", "cube", "session_facts", "chain_shapes", "chain_occurrences", "survival", "compaction", "interventions", "min_recurrence"],
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": { "type": "string" },
+    "unit": { "enum": ["chars", "bytes"] },
+    "dims": {
+      "type": "object",
+      "required": ["projects", "days", "tools", "modes"],
+      "additionalProperties": false,
+      "properties": {
+        "projects": { "type": "array", "items": { "type": "string" } },
+        "days": { "type": "array", "items": { "type": "string", "description": "YYYY-MM-DD (UTC), sorted" } },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string" },
+              "kind": { "enum": ["builtin", "mcp_tool", "unattributed"] },
+              "server": { "type": ["string", "null"] },
+              "tool": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "modes": { "type": "array", "items": { "enum": ["plan", "auto", "acceptEdits", "default", "unknown"] } }
+      }
+    },
+    "mounted_keys": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Comparable keys of the mounted tool set (builtin:Name / mcp:server[/tool]); the client flags any not seen in the filtered window as mounted-but-unused (D7b)."
+    },
+    "cube": {
+      "type": "array",
+      "description": "Sparse aggregate cells; indices reference dims. Summing the full cube reproduces 001 totals (golden check).",
+      "items": {
+        "type": "object",
+        "required": ["p", "d", "t", "m", "sess", "n", "s"],
+        "additionalProperties": false,
+        "properties": {
+          "p": { "type": "integer", "minimum": 0 },
+          "d": { "type": "integer", "minimum": 0 },
+          "t": { "type": "integer", "minimum": 0 },
+          "m": { "type": "integer", "minimum": 0 },
+          "sess": { "type": "integer", "minimum": 0 },
+          "n": { "type": "integer", "minimum": 1 },
+          "s": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "session_facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["p", "d", "sess", "resident_est", "non_tool", "sidechain_size", "sidechain_calls"],
+        "additionalProperties": false,
+        "properties": {
+          "p": { "type": "integer" }, "d": { "type": "integer" }, "sess": { "type": "integer" },
+          "resident_est": { "type": "integer", "minimum": 0, "description": "labeled estimate (001 D7)" },
+          "non_tool": { "type": "integer", "minimum": 0 },
+          "sidechain_size": { "type": "integer", "minimum": 0 },
+          "sidechain_calls": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "chain_shapes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chain_id", "steps", "proposal"],
+        "additionalProperties": false,
+        "properties": {
+          "chain_id": { "type": "string" },
+          "steps": { "type": "array", "items": { "type": "object", "required": ["signature", "fanout"], "additionalProperties": false, "properties": { "signature": { "type": "string" }, "fanout": { "type": "boolean" } } } },
+          "proposal": { "type": "object", "required": ["suggested_name", "inputs", "output"], "additionalProperties": false, "properties": { "suggested_name": { "type": "string" }, "inputs": { "type": "array", "items": { "type": "string" } }, "output": { "type": "string" } } }
+        }
+      }
+    },
+    "chain_occurrences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["chain_id", "p", "d", "sess", "total_cost", "intermediate"],
+        "additionalProperties": false,
+        "properties": {
+          "chain_id": { "type": "string" },
+          "p": { "type": "integer" }, "d": { "type": "integer" }, "sess": { "type": "integer" },
+          "total_cost": { "type": "integer", "minimum": 0 },
+          "intermediate": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "survival": {
+      "type": "object",
+      "required": ["available", "by_tool"],
+      "additionalProperties": false,
+      "properties": {
+        "available": { "type": "boolean" },
+        "by_tool": { "type": "object", "description": "toolIdx(string key) -> rate|null; global (all data), not re-filtered (research.md D5)", "additionalProperties": { "type": ["number", "null"] } }
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "description": "001's exact retention block, carried through (labeled exact).",
+      "required": ["events", "pre_tokens", "post_tokens", "exact"],
+      "properties": {
+        "events": { "type": "integer" }, "pre_tokens": { "type": "integer" },
+        "post_tokens": { "type": "integer" }, "retention_pct": { "type": ["number", "null"] },
+        "exact": { "const": true }
+      }
+    },
+    "interventions": {
+      "type": "array",
+      "items": { "type": "object", "required": ["date", "label"], "additionalProperties": false, "properties": { "date": { "type": "string" }, "label": { "type": "string" } } }
+    },
+    "min_recurrence": { "type": "integer", "minimum": 1 },
+    "initial_filter": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": { "project": { "type": ["string", "null"] }, "from": { "type": ["string", "null"] }, "to": { "type": ["string", "null"] } }
+    }
+  }
+}

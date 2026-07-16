@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="220" viewBox="0 0 760 220" role="img" aria-label="throughline — local Claude Code context-budget analyzer">
+  <defs>
+    <linearGradient id="thread" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- panel: carries its own dark surface so it works on light & dark READMEs -->
+  <rect x="0.5" y="0.5" width="759" height="219" rx="24" fill="#0B0E17" stroke="#26314A"/>
+
+  <!-- wordmark -->
+  <g font-family="'Inter','Segoe UI',Helvetica,Arial,sans-serif" font-weight="800" font-size="72" letter-spacing="-1.5">
+    <text x="56" y="118" textLength="266" lengthAdjust="spacing" fill="#EAEEF7">through</text>
+    <text x="322" y="118" textLength="152" lengthAdjust="spacing" fill="url(#line)">line</text>
+  </g>
+
+  <!-- the through line -->
+  <rect x="58" y="134" width="416" height="6" rx="3" fill="url(#thread)"/>
+
+  <!-- tagline -->
+  <text x="60" y="180" font-family="ui-monospace,'SF Mono',Menlo,Consolas,monospace" font-size="17" fill="#8592AC">local Claude Code context-budget analyzer</text>
+</svg>

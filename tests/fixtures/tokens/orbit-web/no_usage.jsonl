@@ -1,0 +1,2 @@
+{"type": "assistant", "sessionId": "no_usage", "isSidechain": false, "timestamp": "2026-07-10T11:00:00Z", "message": {"role": "assistant", "model": "claude-opus-4-8", "content": [{"type": "text", "text": "A turn that carries no usage block at all."}]}}
+{"type": "assistant", "sessionId": "no_usage", "isSidechain": false, "timestamp": "2026-07-10T11:01:00Z", "message": {"role": "assistant", "model": "claude-opus-4-8", "content": [{"type": "text", "text": "Another turn, still no usage block."}]}}

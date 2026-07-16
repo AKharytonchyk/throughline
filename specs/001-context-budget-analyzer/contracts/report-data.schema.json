@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "throughline/report-data.schema.json",
+  "title": "ReportData",
+  "description": "The analysis output consumed by the HTML renderer. Decouples analysis from rendering so both are independently testable. Every estimated value carries a flag so the renderer can label it (SC-004).",
+  "type": "object",
+  "required": ["generated_at", "scope", "sizing", "breakdown", "sidechain", "compaction", "heatmap", "chains", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": { "type": "string", "description": "ISO 8601 timestamp." },
+    "scope": {
+      "type": "object",
+      "required": ["sessions", "aggregate"],
+      "additionalProperties": false,
+      "properties": {
+        "sessions": { "type": "integer", "minimum": 0 },
+        "from": { "type": ["string", "null"] },
+        "to": { "type": ["string", "null"] },
+        "aggregate": { "type": "boolean", "description": "True = across all sessions; false = single-session drilldown (FR-030)." },
+        "session_id": { "type": ["string", "null"] }
+      }
+    },
+    "sizing": {
+      "type": "object",
+      "required": ["unit", "method_notes"],
+      "additionalProperties": false,
+      "properties": {
+        "unit": { "enum": ["chars", "bytes"] },
+        "chars_per_token": { "type": "number", "description": "Disclosed factor; used only for the resident estimate (D7)." },
+        "method_notes": { "type": "string", "description": "Human-readable disclosure of how sizes/estimates are computed." },
+        "mcp_granularity": { "enum": ["tool", "server"], "description": "MCP mounted-set granularity: tool (from preCompactDiscoveredTools) or server (config fallback) — D7b." }
+      }
+    },
+    "compaction": {
+      "type": "object",
+      "required": ["events", "pre_tokens", "post_tokens", "exact"],
+      "additionalProperties": false,
+      "properties": {
+        "events": { "type": "integer", "minimum": 0 },
+        "pre_tokens": { "type": "integer", "minimum": 0 },
+        "post_tokens": { "type": "integer", "minimum": 0 },
+        "retention_pct": { "type": ["number", "null"], "description": "post/pre × 100 — EXACT, from compactMetadata (D8)." },
+        "exact": { "type": "boolean", "description": "True — this is a measured ratio, not an estimate." }
+      },
+      "description": "Exact context-retention across compaction (FR-024 companion; distinct from the per-tool survival estimate)."
+    },
+    "sidechain": {
+      "type": "object",
+      "required": ["size", "calls"],
+      "additionalProperties": false,
+      "properties": {
+        "size": { "type": "integer", "minimum": 0 },
+        "calls": { "type": "integer", "minimum": 0 }
+      },
+      "description": "Subagent/sidechain volume, reported separately and excluded from breakdown (FR-014, D4)."
+    },
+    "breakdown": {
+      "type": "array",
+      "description": "View 1 buckets; MUST partition the main-thread window and sum to its total size (SC-006, FR-014); per-tool resident buckets are labeled estimates (D7).",
+      "items": {
+        "type": "object",
+        "required": ["key", "kind", "cost_kind", "total_size", "call_count", "share", "is_estimate"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "kind": { "enum": ["builtin", "mcp_tool", "resident", "non_tool", "unattributed"] },
+          "cost_kind": { "enum": ["per_call", "resident"], "description": "Separates resident from per-call (FR-013)." },
+          "server": { "type": ["string", "null"] },
+          "tool": { "type": ["string", "null"] },
+          "total_size": { "type": "integer", "minimum": 0 },
+          "call_count": { "type": "integer", "minimum": 0, "description": "0 = mounted but unused (FR-015)." },
+          "share": { "type": "number", "minimum": 0, "maximum": 1 },
+          "is_estimate": { "type": "boolean" },
+          "estimate_method": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "heatmap": {
+      "type": "array",
+      "description": "View 2 cells: one per invoked tool.",
+      "items": {
+        "type": "object",
+        "required": ["tool_key", "call_count", "total_size"],
+        "additionalProperties": false,
+        "properties": {
+          "tool_key": { "type": "string" },
+          "call_count": { "type": "integer", "minimum": 1 },
+          "total_size": { "type": "integer", "minimum": 0 },
+          "survival": {
+            "type": "object",
+            "required": ["available"],
+            "additionalProperties": false,
+            "properties": {
+              "available": { "type": "boolean" },
+              "rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+              "method": { "type": ["string", "null"] }
+            },
+            "description": "Essentialness shading; always an estimate; null/unavailable when no compaction (FR-018, FR-026)."
+          }
+        }
+      }
+    },
+    "chains": {
+      "type": "array",
+      "description": "View 3, ranked by score descending (FR-022).",
+      "items": {
+        "type": "object",
+        "required": ["chain_id", "steps", "recurrence", "total_cost", "score", "proposal", "survival"],
+        "additionalProperties": false,
+        "properties": {
+          "chain_id": { "type": "string" },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["signature", "fanout"],
+              "additionalProperties": false,
+              "properties": {
+                "signature": { "type": "string" },
+                "fanout": { "type": "boolean", "description": "One logical step regardless of item count (FR-020)." }
+              }
+            }
+          },
+          "data_edges": {
+            "type": "array",
+            "items": { "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+            "description": "Proven output→input dependencies (FR-019)."
+          },
+          "recurrence": { "type": "integer", "minimum": 1 },
+          "total_cost": { "type": "integer", "minimum": 0 },
+          "intermediate_never_essential": { "type": ["integer", "null"], "description": "Estimate; null when survival unavailable (FR-021)." },
+          "survival": {
+            "type": "object",
+            "required": ["available"],
+            "additionalProperties": false,
+            "properties": {
+              "available": { "type": "boolean" },
+              "rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+              "method": { "type": ["string", "null"] }
+            }
+          },
+          "score": { "type": "number", "minimum": 0 },
+          "proposal": {
+            "type": "object",
+            "required": ["suggested_name", "inputs", "output", "est_context_saved"],
+            "additionalProperties": false,
+            "properties": {
+              "suggested_name": { "type": "string" },
+              "inputs": { "type": "array", "items": { "type": "string" } },
+              "output": { "type": "string" },
+              "est_context_saved": { "type": "integer", "minimum": 0, "description": "Estimate, per session (FR-021)." }
+            }
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Explicit notices: no data, no compaction/survival unavailable, parse warnings (FR-010)."
+    }
+  }
+}

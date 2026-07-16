@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Throughline runtime working dir is at ~/.throughline (never in-repo), but guard anyway:
+.throughline/
+
+# Universal
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# screenshots / scratch
+*.png
+# ...but keep the committed dashboard screenshots used by the README
+!assets/screenshots/*.png

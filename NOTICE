@@ -1,0 +1,8 @@
+Throughline
+Copyright 2026 Throughline authors
+
+This product includes software developed as a local, privacy-first analyzer for
+Claude Code context budgets. It has zero third-party runtime dependencies (Python
+standard library only).
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
