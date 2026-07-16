@@ -6,6 +6,8 @@
 
 `100% local` · `no network` · `no telemetry` · `Python stdlib only`
 
+**▶ [Live demo dashboard](https://akharytonchyk.github.io/throughline/)** — interactive, synthetic data
+
 </div>
 
 ---
