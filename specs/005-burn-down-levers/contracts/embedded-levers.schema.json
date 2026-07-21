@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Embedded blob additions for the burn-down / levers view (feature 005)",
+  "description": "Additive fields on the existing EmbeddedData blob (features 001-003). Only the NEW fields are specified here; all existing fields are unchanged. Built once in aggregate.py; consumed client-side by aggregateLevers() in app.js.",
+  "type": "object",
+  "properties": {
+    "chars_per_token": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Disclosed chars<->tokens factor from Config (default 4.0). Newly embedded so the client can convert chain chars (space) to tokens (flow)."
+    },
+    "mounted_resident": {
+      "type": "array",
+      "description": "One row per mounted tool: estimated per-turn resident (schema) token cost, used to price an unmount lever. Filter-independent; built once.",
+      "items": {
+        "type": "object",
+        "required": ["key", "resident_tokens_est", "is_estimate", "method"],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Tool key; matches dims.tools[].key and mounted_keys (mcp:server/tool | builtin:Name)."
+          },
+          "resident_tokens_est": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Estimated per-turn resident tokens = per_tool_chars / chars_per_token, averaged over sessions where the tool is mounted."
+          },
+          "is_estimate": { "type": "boolean", "const": true },
+          "method": {
+            "type": "string",
+            "description": "sizing.RESIDENT_METHOD — the disclosed per-tool schema-split heuristic."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "token_flow": {
+      "type": "object",
+      "description": "Existing feature-003 section; only the NEW unit_prices child is specified here.",
+      "properties": {
+        "unit_prices": {
+          "type": "object",
+          "description": "Per-model unit prices from the parsed prices.json. Present ONLY when a non-empty price list was loaded (same gate as token_flow.cost). Absent => no dollar figure anywhere.",
+          "required": ["available", "currency", "unit_label", "per_million", "by_model"],
+          "properties": {
+            "available": { "type": "boolean", "const": true },
+            "currency": { "type": "string" },
+            "effective": { "type": ["string", "null"] },
+            "unit_label": { "type": "string" },
+            "per_million": { "type": "boolean" },
+            "by_model": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "input": { "type": "number" },
+                  "output": { "type": "number" },
+                  "cache_write": { "type": "number" },
+                  "cache_read": { "type": "number" }
+                },
+                "additionalProperties": false,
+                "description": "A missing token type means that type is unpriced for this model (never guessed)."
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "required": ["chars_per_token", "mounted_resident"]
+}

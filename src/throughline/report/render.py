@@ -166,6 +166,23 @@ footer{color:var(--ink-3);font-size:11.5px;padding:24px 0 0;border-top:1px solid
 .tktable th.tkhelp{border-bottom:1px dotted var(--ink-3)}
 .tkcaption{font-size:12.5px;color:var(--ink-2);margin:2px 0 16px;max-width:80ch;line-height:1.5}
 .tkcaption .mono{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-size:11.5px}
+
+/* ---- feature 005: burn-down / levers (advisory; tokens/day + opt-in $/day) ---- */
+/* own row layout (NOT the fixed-width tkrow grid): long tool names truncate with ellipsis and
+   never collide with the value, which is pinned right. No proportional bar — one dominant lever
+   would render the rest as empty slivers and misrepresent magnitude; ranked exact values instead. */
+.lever{padding:11px 0 10px;border-bottom:1px solid var(--line)}
+.lever:last-child{border-bottom:0}
+.lever-head{display:flex;align-items:baseline;gap:9px}
+.lever-type{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:5px;white-space:nowrap;flex:none}
+.lever-type.t-unmount{color:var(--k-mcp);background:color-mix(in srgb,var(--k-mcp) 16%,transparent)}
+.lever-type.t-chain{color:var(--thread-b);background:color-mix(in srgb,var(--thread-b) 16%,transparent)}
+.lever-type.t-session{color:var(--estimate);background:color-mix(in srgb,var(--estimate) 16%,transparent)}
+.lever-title{font-family:var(--mono);font-size:13px;color:var(--ink);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lever-val{margin-left:auto;flex:none;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink);white-space:nowrap;padding-left:12px}
+.lever-val .money{color:var(--ink-2);font-weight:600}
+.lever-action{font-size:12px;color:var(--ink-2);margin:5px 0 0 4px;max-width:84ch}
+.leverpoint{color:var(--ink-3)}
 """
 
 
@@ -204,6 +221,7 @@ def render_html(embedded: dict) -> str:
     # feature 003: the token-usage lens (hidden until the lens switch selects it)
     P.append("<div id='token-views' style='display:none'>"
              "<div id='token-kpis' class='kpis'></div>"
+             "<section class='viewsec' id='tview-burndown'></section>"
              "<section class='viewsec' id='tview-flow'></section>"
              "<section class='viewsec' id='tview-growth'></section>"
              "<section class='viewsec' id='tview-trend'></section>"

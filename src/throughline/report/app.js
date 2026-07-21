@@ -231,6 +231,114 @@
     return tf && tf.cost && tf.cost.available ? tf.cost : null;
   }
 
+  // ---------- burn-down / levers (feature 005; node-testable) ----------
+  // Composes the existing filtered signals (unmount candidates, chains, token flow) into
+  // ranked, tokens/day-denominated reduction levers. Advisory only. Every figure an estimate.
+  var LONG_SESSION_TURNS = 150;                    // disclosed "long session" threshold (D5/D9)
+  var LEVER_FLOOR_TPD = 1000;                       // disclosed significance floor: tokens/day (D9)
+  function levShort(k) { return k.indexOf("mcp:") === 0 && k.indexOf("/") > 0
+    ? k.split("/").slice(1).join("/") : (k.indexOf("builtin:") === 0 ? k.slice(8) : k); }
+  function leverBasis(blob, filter) {              // active days + turns/day for the filtered scope (D3)
+    var tf = blob.token_flow, dayset = {}, turns = 0;
+    if (tf) {
+      (tf.by_day || []).forEach(function (r) {
+        if (filter.project && blob.dims.projects[r.p] !== filter.project) return;
+        var day = blob.dims.days[r.d];
+        if (day === "undated" || !dayInRange(day, filter.from, filter.to)) return;
+        dayset[day] = 1;
+      });
+      tf.sessions.forEach(function (s) { if (passesTokenSession(blob, filter, s)) turns += s.turns; });
+    }
+    var active = Object.keys(dayset).length;
+    return { active_days: active, turns: turns,
+             turns_per_day: active ? turns / active : 0, small_sample: active > 0 && active < 3 };
+  }
+  function blendedCacheReadPrice(blob, filter) {   // scope-weighted cache-read $/token (D6)
+    var up = blob.token_flow && blob.token_flow.unit_prices;
+    if (!up || !up.available) return { price: null, unpriced: [] };
+    var bm = flowByModel(blob, filter), num = 0, den = 0, unpriced = [];
+    Object.keys(bm).forEach(function (m) {
+      var pr = up.by_model[m], cr = bm[m].cache_read;
+      if (!pr || pr.cache_read == null) { if (cr > 0) unpriced.push(m); return; }
+      var perTok = up.per_million ? pr.cache_read / 1e6 : pr.cache_read;
+      num += cr * perTok; den += cr;
+    });
+    return { price: den ? num / den : null, unpriced: unpriced };
+  }
+  function cumReadAt(growth, turnIndex) {          // interpolate cum cache-read at a turn on the growth curve
+    if (!growth || !growth.length) return 0;
+    if (turnIndex <= growth[0].i) return growth[0].cum_read;
+    for (var k = 1; k < growth.length; k++) {
+      if (growth[k].i >= turnIndex) {
+        var a = growth[k - 1], b = growth[k], span = (b.i - a.i) || 1;
+        return a.cum_read + (b.cum_read - a.cum_read) * (turnIndex - a.i) / span;
+      }
+    }
+    return growth[growth.length - 1].cum_read;
+  }
+  function aggregateLevers(blob, filter) {
+    var basis = leverBasis(blob, filter);
+    var out = { levers: [], aggregate_tokens_per_day: 0, aggregate_dollars_per_day: null,
+                overlap_caveat: true, priced: false, unpriced_models: [], empty_reason: null, basis: basis };
+    var tf = blob.token_flow;
+    if (!tf || basis.active_days === 0) { out.empty_reason = "No token activity in this window."; return out; }
+    var cpt = blob.chars_per_token || 4.0;
+    var pinfo = blendedCacheReadPrice(blob, filter);
+    out.priced = pinfo.price !== null;
+    out.unpriced_models = pinfo.unpriced;
+    var money = function (t) { return pinfo.price === null ? null : t * pinfo.price; };
+    var levers = [];
+
+    // 1) unmount levers — one per mounted-but-unused tool (D2)
+    var bd = aggregateBreakdown(blob, filter);
+    var resById = {}; (blob.mounted_resident || []).forEach(function (r) { resById[r.key] = r; });
+    (bd.unused || []).forEach(function (key) {
+      var r = resById[key]; if (!r) return;
+      var tpd = r.resident_tokens_est * basis.turns_per_day;
+      levers.push({ type: "unmount", id: key, title: levShort(key),
+        action: "Unmount " + levShort(key) + " — mounted but never called in this window; its schema is re-sent as cache-read every turn.",
+        tokens_per_day: tpd, dollars_per_day: money(tpd),
+        method: "estimate: per-tool resident " + r.resident_tokens_est + " tokens × " + Math.round(basis.turns_per_day) + " turns/day. " + r.method });
+    });
+
+    // 2) chain levers (D4)
+    aggregateChains(blob, filter).forEach(function (c) {
+      var tpd = c.est_saved * c.recurrence / cpt / basis.active_days;
+      levers.push({ type: "chain", id: c.chain_id, title: c.proposal.suggested_name,
+        action: "Collapse " + c.steps.map(function (s) { return levShort(s.signature); }).join("→") + " into one intent tool (recurs " + c.recurrence + "×).",
+        tokens_per_day: tpd, dollars_per_day: money(tpd),
+        method: "estimate: avg " + c.est_saved + " intermediate chars × " + c.recurrence + " occ ÷ " + cpt + " chars/token ÷ " + basis.active_days + " active days." });
+    });
+
+    // 3) session-length lever — one aggregate (D5)
+    var excess = 0, longCount = 0;
+    tf.sessions.forEach(function (s) {
+      if (!passesTokenSession(blob, filter, s) || s.turns <= LONG_SESSION_TURNS) return;
+      longCount += 1;
+      excess += Math.max(s.totals.cache_read - cumReadAt(s.growth, LONG_SESSION_TURNS), 0);
+    });
+    if (longCount > 0) {
+      var stpd = excess / basis.active_days;
+      levers.push({ type: "session_length", id: "session_length",
+        title: longCount + " long session" + (longCount === 1 ? "" : "s"),
+        action: "Clear/compact sooner — " + longCount + " session(s) ran past " + LONG_SESSION_TURNS + " turns, re-billing resident context every extra turn.",
+        tokens_per_day: stpd, dollars_per_day: money(stpd),
+        method: "estimate: cache-read accrued after turn " + LONG_SESSION_TURNS + " (from the growth curve), summed over long sessions ÷ " + basis.active_days + " active days." });
+    }
+
+    // 4) significance floor + rank (D9): drop zero/negative and levers under ~1k tokens/day
+    // (noise); ranking + the top-N display cap keep the list from becoming a wall of rows.
+    levers = levers.filter(function (l) { return l.tokens_per_day >= LEVER_FLOOR_TPD; });
+    levers.sort(function (a, b) { return b.tokens_per_day - a.tokens_per_day; });
+    if (!levers.length) { out.empty_reason = "No significant levers in this window."; return out; }
+
+    // 5) aggregate (D10) — sum of shown levers; NEVER strictly additive (overlap caveat carried)
+    out.levers = levers;
+    out.aggregate_tokens_per_day = levers.reduce(function (s, l) { return s + l.tokens_per_day; }, 0);
+    if (out.priced) out.aggregate_dollars_per_day = levers.reduce(function (s, l) { return s + (l.dollars_per_day || 0); }, 0);
+    return out;
+  }
+
   var API = {
     dayInRange: dayInRange, passesCell: passesCell, filterCells: filterCells,
     aggregateBreakdown: aggregateBreakdown, aggregateHeatmap: aggregateHeatmap,
@@ -238,7 +346,8 @@
     aggregateChains: aggregateChains, chooseGranularity: chooseGranularity, weekOf: weekOf,
     spanDays: spanDays,
     flowTotals: flowTotals, flowByModel: flowByModel, flowByDay: flowByDay,
-    sessionGrowth: sessionGrowth, costEstimate: costEstimate
+    sessionGrowth: sessionGrowth, costEstimate: costEstimate,
+    aggregateLevers: aggregateLevers, leverBasis: leverBasis
   };
 
   if (typeof module !== "undefined" && module.exports) { module.exports = API; return; }
@@ -343,7 +452,8 @@
         "<span class='n'>" + (r.share * 100).toFixed(1) + "%</span></div>"; }).join("");
     var unused = bd.unused.length
       ? "<p class='sidechain'>Mounted but unused in this window (" + bd.unused.length + "): " +
-        bd.unused.slice(0, 12).map(function (k) { return "<code>" + esc(shortKey(k)) + "</code>"; }).join(" ") + "</p>"
+        bd.unused.slice(0, 12).map(function (k) { return "<code>" + esc(shortKey(k)) + "</code>"; }).join(" ") +
+        " — see <b>Biggest levers</b> (Token usage lens) for the tokens/$ per day these cost.</p>"
       : "";
     el("view-spend").innerHTML = section("01", "Where the context goes",
       "Share of the filtered main-thread window, by size. Resident is a labeled estimate. "
@@ -451,10 +561,49 @@
     el("token-views").style.display = empty ? "none" : "block";
     if (empty) return;
     renderTokenKpis(totals);
+    renderBurndown();
     renderTokenFlow(totals);
     renderTokenGrowth();
     renderTokenTrend();
     renderTokenCost();
+  }
+
+  function curOf() { return (TF && TF.unit_prices && TF.unit_prices.currency) || "USD"; }
+
+  function renderBurndown() {
+    var s = aggregateLevers(BLOB, filter);
+    var head = section("01", "Biggest levers",
+      "Your biggest levers to cut daily context burn, ranked by projected <b>tokens saved per day</b>. "
+      + "Every figure is a labeled <span class='chip est'>estimate</span> with its method on hover — "
+      + "this view is <b>advisory only</b>, it changes nothing about Claude Code.");
+    if (s.empty_reason) { el("tview-burndown").innerHTML = head + "<p class='muted'>" + esc(s.empty_reason) + "</p>"; return; }
+    var priced = s.priced;
+    var aggMoney = priced ? " · " + moneyFmt(s.aggregate_dollars_per_day, curOf()) + "/day" : "";
+    var agg = "<div class='tkshare'><span class='big'>" + human(s.aggregate_tokens_per_day) + "</span>" +
+      "<span class='lbl'>tokens/day if you act on all " + s.levers.length + " lever" + (s.levers.length === 1 ? "" : "s") + aggMoney +
+      " — <b>not additive</b>: levers can address overlapping spend, so treat this as a rough upper bound, not an exact sum.</span></div>";
+    var basisLine = "<p class='tkcaption'>Per-day rates use <b>" + s.basis.active_days + "</b> active day(s) (~" +
+      human(s.basis.turns_per_day) + " turns/day)." +
+      (s.basis.small_sample ? " <b>Small sample</b> (&lt;3 active days) — treat as rough." : "") +
+      (s.unpriced_models.length ? " Models excluded from $ (no price): " + esc(s.unpriced_models.join(", ")) + "." : "") + "</p>";
+    var CAP = 8, umShown = 0, moreCount = 0;
+    var TYPE = { unmount: ["t-unmount", "unmount"], chain: ["t-chain", "collapse"],
+                 session_length: ["t-session", "session"] };
+    var rows = s.levers.map(function (l) {
+      if (l.type === "unmount") { umShown++; if (umShown > CAP) { moreCount++; return ""; } }
+      var ty = TYPE[l.type] || ["t-unmount", l.type];
+      var money = (priced && l.dollars_per_day !== null)
+        ? " <span class='money'>· " + moneyFmt(l.dollars_per_day, curOf()) + "/day</span>" : "";
+      return "<div class='lever'><div class='lever-head'>" +
+        "<span class='lever-type " + ty[0] + "'>" + ty[1] + "</span>" +
+        "<span class='lever-title tkhelp' data-tip='" + esc(l.title) + "' data-sub='" + esc(l.method) + "'>" +
+          esc(l.title) + "</span>" +
+        "<span class='chip est'>est</span>" +
+        "<span class='lever-val'>" + human(l.tokens_per_day) + "/day" + money + "</span>" +
+        "</div><div class='lever-action'><span class='leverpoint'>▸</span> " + esc(l.action) + "</div></div>";
+    }).join("");
+    var more = moreCount ? "<p class='muted'>+ " + moreCount + " more unmount candidate(s) below the top " + CAP + ".</p>" : "";
+    el("tview-burndown").innerHTML = head + agg + basisLine + "<div class='rows'>" + rows + "</div>" + more;
   }
 
   function renderTokenKpis(totals) {
@@ -512,7 +661,7 @@
     var shareTip = "The share of all tokens that are cache-read: cached context re-sent and re-billed "
       + "every turn. The higher it is, the more you're paying to keep carrying context instead of "
       + "running /clear and starting a fresh, smaller task.";
-    el("tview-flow").innerHTML = section("01", "Token flow by type",
+    el("tview-flow").innerHTML = section("02", "Token flow by type",
       "Exact per-turn token spend, summed over the filtered window. <span class='chip exact'>exact</span> "
       + "reads from each turn's usage — not estimated. Cache-read is context <b>re-billed every turn</b>.") +
       "<div class='tkshare'><span class='big tkhelp' data-tip='cache-read share' data-sub='" + esc(shareTip) + "'>"
@@ -535,13 +684,13 @@
     var sess = TF.sessions.filter(function (s) { return passesTokenSession(BLOB, filter, s) && s.turns > 0; })
       .map(function (s) { var t = s.totals; return { id: s.session, tot: t.input + t.output + t.cache_write + t.cache_read }; })
       .sort(function (a, b) { return b.tot - a.tot; });
-    if (!sess.length) { el("tview-growth").innerHTML = section("02", "Re-billing growth over a session",
+    if (!sess.length) { el("tview-growth").innerHTML = section("03", "Re-billing growth over a session",
       "How a session's cumulative token cost grows turn by turn.") +
       "<p class='muted'>No sessions with token usage in this window.</p>"; return; }
     if (!selectedGrowth || !sess.some(function (s) { return s.id === selectedGrowth; })) selectedGrowth = sess[0].id;
     var opts = sess.map(function (s) { return "<option value='" + esc(s.id) + "'" +
       (s.id === selectedGrowth ? " selected" : "") + ">" + esc(s.id) + " (" + human(s.tot) + ")</option>"; }).join("");
-    el("tview-growth").innerHTML = section("02", "Re-billing growth over a session",
+    el("tview-growth").innerHTML = section("03", "Re-billing growth over a session",
       "Cumulative tokens across a session's turns. The filled band is <b>cache-read</b> — the context "
       + "re-sent (and re-billed) every turn — which is what makes long sessions expensive.") +
       "<div class='ctl'><label>Session <select id='growthsel'>" + opts + "</select></label></div>" +
@@ -559,7 +708,7 @@
       var cls = d.pct > 0 ? "d-up" : "d-dn", arrow = d.pct > 0 ? "▲" : "▼";
       return "<span><b>" + esc(d.label) + "</b> (" + esc(d.date) + "): mean daily tokens <b>" + human(d.before) +
         "</b> → <b>" + human(d.after) + "</b> <span class='" + cls + "'>" + arrow + " " + Math.abs(d.pct).toFixed(0) + "%</span></span>"; }).join("") + "</div>" : "";
-    el("tview-trend").innerHTML = section("03", "Token spend over time",
+    el("tview-trend").innerHTML = section("04", "Token spend over time",
       "Total tokens per bucket, honoring the repo/time filter. Intervention markers show when you changed "
       + "how you work; the deltas below <b>read</b> the before/after change in mean daily tokens (SC-003).") + chart + dhtml;
   }
@@ -590,7 +739,7 @@
     var table = "<table class='tktable'><thead><tr><th class='l'>model</th><th>input</th><th>output</th>" +
       "<th>cache-write</th><th>cache-read</th><th>total</th></tr></thead><tbody>" + rows +
       "<tr class='sum'><td class='l'>estimated total</td><td></td><td></td><td></td><td></td><td>" + moneyFmt(cost.total, cur) + "</td></tr></tbody></table>";
-    el("tview-cost").innerHTML = section("04", "Estimated cost",
+    el("tview-cost").innerHTML = section("05", "Estimated cost",
       "<span class='chip est'>estimate</span> from your <span class='mono'>prices.json</span> — " + esc(cost.unit_label) +
       (cost.effective ? ", prices as of " + esc(cost.effective) : "") +
       ". Covers all collected sessions. Models absent from your price list are shown <b>unpriced</b>, never guessed.") + table;

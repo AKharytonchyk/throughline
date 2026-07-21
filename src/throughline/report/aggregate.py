@@ -75,6 +75,7 @@ def build_embedded_data(sessions: list, mounted: list[MountedTool], cfg: Config,
     # ---- pass 2: cube + session facts ----
     cube_map: dict[tuple, list] = {}  # (p,d,t,m,sess) -> [n, s]
     session_facts = []
+    resident_acc: dict[str, list] = {}  # tool key -> [sum per-tool resident chars, session count] (feature 005)
     for s in sessions:
         p = proj_i[s.project]
         sd = day_i[session_day[s.session_id]]
@@ -86,6 +87,10 @@ def build_embedded_data(sessions: list, mounted: list[MountedTool], cfg: Config,
             cell[0] += 1
             cell[1] += c.input_size + c.output_size
         res = sizing.resident_estimate(s, mounted, cfg)
+        for key, sz in res.per_tool.items():  # feature 005: accumulate per-tool resident for the levers view
+            acc = resident_acc.setdefault(key, [0, 0])
+            acc[0] += sz
+            acc[1] += 1
         session_facts.append({
             "p": p, "d": sd, "sess": si,
             "resident_est": res.total_overhead_size,
@@ -144,6 +149,15 @@ def build_embedded_data(sessions: list, mounted: list[MountedTool], cfg: Config,
         (m.name if m.name.startswith("mcp:") else f"builtin:{m.name}") for m in mounted
     })
 
+    # per-tool resident tokens (feature 005): mean per-tool resident chars over sessions where
+    # mounted, converted to tokens — the per-turn cost the client prices an unmount lever against.
+    cpt = cfg.chars_per_token or 1.0
+    mounted_resident = [
+        {"key": key, "resident_tokens_est": round((total / count) / cpt),
+         "is_estimate": True, "method": sizing.RESIDENT_METHOD}
+        for key, (total, count) in sorted(resident_acc.items()) if count
+    ]
+
     # ---- token flow (feature 003): a SEPARATE section; never merged with cube/session_facts ----
     token_sessions = []
     models_seen: set[str] = set()
@@ -177,6 +191,9 @@ def build_embedded_data(sessions: list, mounted: list[MountedTool], cfg: Config,
     cost = cost_mod.estimate(tokens_mod.sum_by_model(token_sessions), price_list)
     if cost:  # attach only when a non-empty price list was loaded (US4 / FR-010)
         token_flow["cost"] = cost
+    unit_prices = cost_mod.unit_prices(price_list)
+    if unit_prices:  # feature 005: raw per-model unit prices for scope-aware lever dollarizing
+        token_flow["unit_prices"] = unit_prices
 
     from datetime import datetime, timezone
     return {
@@ -189,6 +206,8 @@ def build_embedded_data(sessions: list, mounted: list[MountedTool], cfg: Config,
             "modes": MODES,
         },
         "mounted_keys": mounted_keys,
+        "mounted_resident": mounted_resident,
+        "chars_per_token": cfg.chars_per_token,
         "cube": cube,
         "session_facts": session_facts,
         "token_flow": token_flow,

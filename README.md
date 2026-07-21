@@ -143,6 +143,25 @@ The token view is **self-explaining**: an always-visible caption states the cach
 plain language, and each token type (and the cache-read share) carries a hover explanation
 (dotted-underline = "hover me"). The headline insight is never hidden behind a tooltip.
 
+### Biggest levers (burn-down)
+
+The token lens opens with a **burn-down** panel: your biggest levers to cut daily context
+burn, **ranked by projected tokens saved per day** (and, if you drop in a `prices.json`,
+`$/day`). It unifies signals from the other views into one prioritized, actionable list —
+mounted-but-unused tools, collapsible chains, and long re-billing sessions — so the answer to
+*"where do I cut first?"* is a single sorted list, not three separate charts.
+
+![Biggest levers](assets/screenshots/burndown.png)
+
+*Each lever names the change to make (unmount X · collapse Y→Z · clear/compact sooner), with a
+labeled per-day saving. The headline aggregate is shown with an explicit **not-additive** caveat
+(levers can overlap). It is **advisory only** — it never installs caps or changes Claude Code.*
+
+Everything is a **labeled estimate** with its method on hover; the space signal (a tool's
+resident schema) is bridged to the flow unit (tokens re-billed as `cache_read` every turn ×
+turns/day) so a lever's saving maps to what actually drives the bill. With no `prices.json`, no
+dollar figure appears — token savings still do.
+
 ## Estimates vs exact
 
 Per-call and non-tool **sizes** are **exact** (characters/bytes); per-turn **token** counts are
@@ -177,8 +196,8 @@ recurrence threshold, MCP config paths, opt-in state).
 ## Tests
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests   # 79 stdlib unittest (incl. token reconciliation golden)
-node --test tests/app_aggregate.test.mjs tests/token_flow.test.mjs   # 11 client-aggregation tests (dev-only)
+PYTHONPATH=src python3 -m unittest discover -s tests   # 85 stdlib unittest (incl. token + resident-split goldens)
+node --test tests/app_aggregate.test.mjs tests/token_flow.test.mjs tests/burndown.test.mjs   # 19 client-aggregation tests (dev-only)
 ```
 
 ## Scope

@@ -55,3 +55,31 @@ def estimate(by_model_totals: dict, price_list: dict | None) -> dict | None:
         "total": grand,
         "by_model": by_model,
     }
+
+
+def unit_prices(price_list: dict | None) -> dict | None:
+    """Per-model UNIT prices for scope-aware client-side dollarizing (feature 005).
+
+    Unlike ``estimate`` (whole-dataset computed dollars), this exposes the raw per-model,
+    per-type unit prices so the client can dollarize a *filtered* token saving. Same opt-in
+    gate: empty/missing price list ⇒ None ⇒ no dollar figure anywhere. A missing token type
+    for a model is simply omitted (that type is unpriced — never guessed).
+    """
+    models = (price_list or {}).get("models") or {}
+    if not price_list or not models:
+        return None
+    unit = price_list.get("unit", "per_million")
+    per_million = unit != "per_token"
+    currency = price_list.get("currency", "USD")
+    denom = "million tokens" if per_million else "token"
+    return {
+        "available": True,
+        "currency": currency,
+        "effective": price_list.get("effective"),
+        "unit_label": f"{currency} per {denom}",
+        "per_million": per_million,
+        "by_model": {
+            model: {k: prices[k] for k in FLOW_KEYS if isinstance(prices, dict) and prices.get(k) is not None}
+            for model, prices in models.items()
+        },
+    }
