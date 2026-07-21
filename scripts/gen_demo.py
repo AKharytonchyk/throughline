@@ -92,7 +92,9 @@ def read_size(day: str) -> int:
 
 
 def ts_for(day: str, seq: int) -> str:
-    h = 9 + seq // 6
+    # keep the hour valid (9..22) even for long sessions with many turns — wrap rather than
+    # overflow past 23 (which would produce an invalid, "undated" timestamp)
+    h = 9 + (seq // 6) % 14
     m = (seq * 7) % 60
     return f"{day}T{h:02d}:{m:02d}:{(seq * 13) % 60:02d}Z"
 
@@ -124,6 +126,9 @@ for wk in range(6):
             "day": random.choice(wdays),
             "mode": MODES[sid_n % len(MODES)],
             "with_compact": (sid_n == 6),          # one session shows a compaction event
+            # a few marathon sessions (>150 turns) re-billing resident every turn — the
+            # burn-down "clear/compact sooner" lever the $/day audience cares about
+            "long": (sid_n in (5, 12, 20)),
             "model": "claude-sonnet-5" if sid_n % 4 == 0 else "claude-opus-4-8",
         })
 
@@ -178,7 +183,8 @@ def build_session(s):
         add_tool("Edit", {"file_path": file_tok, "old_string": sym_tok, "new_string": f"{sym_tok}_v2"},
                  pad("edit applied ok", random.randint(500, 1500)))
 
-    for _ in range(random.randint(16, 34)):
+    main_iters = random.randint(190, 260) if s.get("long") else random.randint(16, 34)
+    for _ in range(main_iters):
         if random.random() < 0.35:      # interleaved reasoning (non-tool content)
             add_text("reasoning", 300, 2400)
         t = random.choices(
